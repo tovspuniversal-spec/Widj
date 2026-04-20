@@ -16,20 +16,24 @@ app.get("/fuel.json", async (req, res) => {
     let lpg = "—";
 
     $("table tr").each((i, el) => {
-      const text = $(el).text();
+  const tds = $(el).find("td");
 
-      if (text.includes("А-95")) {
-        a95 = $(el).find("td").last().text().trim();
-      }
+  const name = $(el).find("th, td").first().text();
 
-      if (text.includes("ДП")) {
-        diesel = $(el).find("td").last().text().trim();
-      }
+  const price = tds.eq(tds.length - 1).text().trim();
 
-      if (text.includes("Газ")) {
-        lpg = $(el).find("td").last().text().trim();
-      }
-    });
+  if (name.includes("А-95")) {
+    a95 = price;
+  }
+
+  if (name.includes("ДП")) {
+    diesel = price;
+  }
+
+  if (name.includes("Газ")) {
+    lpg = price;
+  }
+});
 
     res.json({
       ukraine: { a95, diesel, lpg },
