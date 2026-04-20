@@ -1,36 +1,50 @@
 const express = require("express");
+const cors = require("cors");
 const axios = require("axios");
+const cheerio = require("cheerio");
+
 const app = express();
+app.use(cors());
 
 app.get("/fuel.json", async (req, res) => {
   try {
-    // 🔹 джерело (приклад — відкриті дані)
     const response = await axios.get("https://index.minfin.com.ua/ua/markets/fuel/");
+    const $ = cheerio.load(response.data);
 
-    const html = response.data;
+    let a95 = "—";
+    let diesel = "—";
+    let lpg = "—";
 
-    // 🔥 дуже простий парсинг (можна покращити)
-    const a95 = html.match(/А-95[\s\S]{0,100}?(\d{2}\.\d{2})/)?.[1] || "—";
-    const diesel = html.match(/ДП[\s\S]{0,100}?(\d{2}\.\d{2})/)?.[1] || "—";
-    const lpg = html.match(/Газ[\s\S]{0,100}?(\d{2}\.\d{2})/)?.[1] || "—";
+    $("table tr").each((i, el) => {
+      const text = $(el).text();
+
+      if (text.includes("А-95")) {
+        a95 = $(el).find("td").last().text().trim();
+      }
+
+      if (text.includes("ДП")) {
+        diesel = $(el).find("td").last().text().trim();
+      }
+
+      if (text.includes("Газ")) {
+        lpg = $(el).find("td").last().text().trim();
+      }
+    });
 
     res.json({
-      ukraine: {
-        a95,
-        diesel,
-        lpg
-      },
+      ukraine: { a95, diesel, lpg },
       updated: new Date().toISOString()
     });
 
   } catch (e) {
     res.json({
-      error: "Не вдалося отримати дані",
+      error: "Помилка парсингу",
       updated: new Date().toISOString()
     });
   }
 });
 
-const PORT = process.env.PORT || 3000;
+app.listen(process.env.PORT || 3000);
+
 app.listen(PORT);
 
