@@ -10,9 +10,9 @@ app.get("/fuel.json", async (req, res) => {
     const html = response.data;
 
     // 🔥 дуже простий парсинг (можна покращити)
-    const a95 = html.match(/А-95[^0-9]*([\d.]+)/)?.[1] || "—";
-    const diesel = html.match(/ДП[^0-9]*([\d.]+)/)?.[1] || "—";
-    const lpg = html.match(/Газ[^0-9]*([\d.]+)/)?.[1] || "—";
+    const a95 = html.match(/А-95[\s\S]{0,100}?(\d{2}\.\d{2})/)?.[1] || "—";
+    const diesel = html.match(/ДП[\s\S]{0,100}?(\d{2}\.\d{2})/)?.[1] || "—";
+    const lpg = html.match(/Газ[\s\S]{0,100}?(\d{2}\.\d{2})/)?.[1] || "—";
 
     res.json({
       ukraine: {
