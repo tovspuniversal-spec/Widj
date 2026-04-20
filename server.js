@@ -1,70 +1,35 @@
 const express = require("express");
-const cors = require("cors");
-const fs = require("fs");
-
+const axios = require("axios");
 const app = express();
-app.use(cors());
 
-const FILE = "history.json";
-
-// 🟢 ініціалізація історії
-function loadHistory() {
+app.get("/fuel.json", async (req, res) => {
   try {
-    return JSON.parse(fs.readFileSync(FILE));
-  } catch {
-    return [];
+    // 🔹 джерело (приклад — відкриті дані)
+    const response = await axios.get("https://index.minfin.com.ua/ua/markets/fuel/");
+
+    const html = response.data;
+
+    // 🔥 дуже простий парсинг (можна покращити)
+    const a95 = html.match(/А-95[^0-9]*([\d.]+)/)?.[1] || "—";
+    const diesel = html.match(/ДП[^0-9]*([\d.]+)/)?.[1] || "—";
+    const lpg = html.match(/Газ[^0-9]*([\d.]+)/)?.[1] || "—";
+
+    res.json({
+      ukraine: {
+        a95,
+        diesel,
+        lpg
+      },
+      updated: new Date().toISOString()
+    });
+
+  } catch (e) {
+    res.json({
+      error: "Не вдалося отримати дані",
+      updated: new Date().toISOString()
+    });
   }
-}
-
-function saveHistory(data) {
-  fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
-}
-
-// 🟡 симульовані дані (замінюються твоїм API)
-function getCurrentPrices() {
-  return {
-    a95: 63.95,
-    diesel: 63.95,
-    lpg: 32.1
-  };
-}
-
-// 🔥 додати нову точку
-function addPoint() {
-  let history = loadHistory();
-
-  const now = new Date().toISOString();
-  const current = getCurrentPrices();
-
-  history.push({
-    time: now,
-    ...current
-  });
-
-  // 🔥 тримаємо останні 30 записів (≈ 7–10 днів)
-  if (history.length > 30) {
-    history = history.slice(-30);
-  }
-
-  saveHistory(history);
-  return history;
-}
-
-app.get("/fuel.json", (req, res) => {
-  const history = addPoint();
-
-  const last = history[history.length - 1];
-
-  res.json({
-    ukraine: last,
-    history,
-    updated: last.time
-  });
-});
-
-app.get("/history.json", (req, res) => {
-  res.json(loadHistory());
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("History API running"));
+app.listen(PORT);
