@@ -19,14 +19,14 @@ app.get("/fuel.json", async (req, res) => {
       const tds = $(el).find("td");
       const title = $(el).find("th, td").first().text().trim();
 
-      // беремо саме останню колонку як ціну
-      const price = tds.last().text().trim();
+      // 🔥 ВАЖЛИВО: беремо НЕ останню, а ПЕРЕДОСТАННЮ (ціна)
+      const price = tds.eq(1).text().trim();
 
       if (title.includes("А-95") && price) {
         a95 = price;
       }
 
-      if ((title.includes("ДП") || title.toLowerCase().includes("дизель")) && price) {
+      if ((title.includes("ДП") || title.includes("Дизель")) && price) {
         diesel = price;
       }
 
@@ -36,17 +36,13 @@ app.get("/fuel.json", async (req, res) => {
     });
 
     res.json({
-      ukraine: {
-        a95,
-        diesel,
-        lpg
-      },
+      ukraine: { a95, diesel, lpg },
       updated: new Date().toISOString()
     });
 
-  } catch (error) {
+  } catch (e) {
     res.json({
-      error: "failed_to_fetch_data",
+      error: "parse_failed",
       ukraine: {
         a95: "—",
         diesel: "—",
