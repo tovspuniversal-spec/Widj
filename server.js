@@ -38,12 +38,14 @@ app.get("/fuel.json", async (req, res) => {
 
   } catch (e) {
     res.json({
-      error: "Помилка парсингу",
+      error: "parse error",
       updated: new Date().toISOString()
     });
   }
+});
 
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
   console.log("Server running on port " + PORT);
 });
