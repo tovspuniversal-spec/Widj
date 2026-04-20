@@ -16,37 +16,40 @@ app.get("/fuel.json", async (req, res) => {
     let lpg = "—";
 
     $("table tr").each((i, el) => {
-      const text = $(el).text();
+      const tds = $(el).find("td");
+      const title = $(el).find("th, td").first().text().trim();
 
-      if (text.includes("А-95")) {
-        a95 = $(el).find("td").last().text().trim();
+      // беремо саме останню колонку як ціну
+      const price = tds.last().text().trim();
+
+      if (title.includes("А-95") && price) {
+        a95 = price;
       }
 
-      if (text.includes("ДП")) {
-        diesel = $(el).find("td").last().text().trim();
+      if ((title.includes("ДП") || title.toLowerCase().includes("дизель")) && price) {
+        diesel = price;
       }
 
-      if (text.includes("Газ")) {
-        lpg = $(el).find("td").last().text().trim();
+      if (title.includes("Газ") && price) {
+        lpg = price;
       }
     });
 
     res.json({
-      ukraine: { a95, diesel, lpg },
+      ukraine: {
+        a95,
+        diesel,
+        lpg
+      },
       updated: new Date().toISOString()
     });
 
-  } catch (e) {
+  } catch (error) {
     res.json({
-      error: "parse error",
-      updated: new Date().toISOString()
-    });
-  }
-});
-
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
-});
-
+      error: "failed_to_fetch_data",
+      ukraine: {
+        a95: "—",
+        diesel: "—",
+        lpg: "—"
+      },
+      updated: new Date()
