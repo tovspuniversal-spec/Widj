@@ -1,78 +1,70 @@
 const express = require("express");
 const cors = require("cors");
-const axios = require("axios");
+const fs = require("fs");
 
 const app = express();
 app.use(cors());
 
-let cache = null;
-let cacheTime = 0;
-const TTL = 30 * 60 * 1000; // 30 хв
+const FILE = "history.json";
 
-// 🟢 1. курс НБУ
-async function getFX() {
-  const { data } = await axios.get(
-    "https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json"
-  );
-
-  const usd = data.find(x => x.cc === "USD");
-  return usd ? usd.rate : 41.5; // fallback
-}
-
-// 🟡 2. базова світова ціна пального (USD)
-function getGlobalFuelUSD() {
-  return {
-    a95: 1.52,
-    diesel: 1.45,
-    lpg: 0.85
-  };
-}
-
-// 🔥 конвертація
-function convertToUAH(fuelUSD, fx) {
-  return {
-    a95: (fuelUSD.a95 * fx).toFixed(2),
-    diesel: (fuelUSD.diesel * fx).toFixed(2),
-    lpg: (fuelUSD.lpg * fx).toFixed(2)
-  };
-}
-
-app.get("/fuel.json", async (req, res) => {
+// 🟢 ініціалізація історії
+function loadHistory() {
   try {
-    const now = Date.now();
-
-    if (cache && now - cacheTime < TTL) {
-      return res.json({ ...cache, cached: true });
-    }
-
-    const fx = await getFX();
-    const usd = getGlobalFuelUSD();
-    const uah = convertToUAH(usd, fx);
-
-    const result = {
-      ukraine: uah,
-      fx: fx,
-      base_usd: usd,
-      updated: new Date().toISOString(),
-      mode: "FX_FUEL_INDEX"
-    };
-
-    cache = result;
-    cacheTime = now;
-
-    res.json(result);
-
-  } catch (e) {
-    res.json({
-      error: "fx_index_fallback",
-      ukraine: {
-        a95: "—",
-        diesel: "—",
-        lpg: "—"
-      }
-    });
+    return JSON.parse(fs.readFileSync(FILE));
+  } catch {
+    return [];
   }
+}
+
+function saveHistory(data) {
+  fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
+}
+
+// 🟡 симульовані дані (замінюються твоїм API)
+function getCurrentPrices() {
+  return {
+    a95: 63.95,
+    diesel: 63.95,
+    lpg: 32.1
+  };
+}
+
+// 🔥 додати нову точку
+function addPoint() {
+  let history = loadHistory();
+
+  const now = new Date().toISOString();
+  const current = getCurrentPrices();
+
+  history.push({
+    time: now,
+    ...current
+  });
+
+  // 🔥 тримаємо останні 30 записів (≈ 7–10 днів)
+  if (history.length > 30) {
+    history = history.slice(-30);
+  }
+
+  saveHistory(history);
+  return history;
+}
+
+app.get("/fuel.json", (req, res) => {
+  const history = addPoint();
+
+  const last = history[history.length - 1];
+
+  res.json({
+    ukraine: last,
+    history,
+    updated: last.time
+  });
+});
+
+app.get("/history.json", (req, res) => {
+  res.json(loadHistory());
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("FX Fuel Index running"));
+app.listen(PORT, () => console.log("History API running"));
