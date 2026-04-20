@@ -7,48 +7,34 @@ app.use(cors());
 
 let cache = null;
 let cacheTime = 0;
-const TTL = 20 * 60 * 1000; // 20 хв
+const TTL = 30 * 60 * 1000; // 30 хв
 
-const fallback = {
-  a95: 56.90,
-  diesel: 54.20,
-  lpg: 32.10
-};
-
-// 🔥 SOURCE 1 — Minfin (ринкові середні)
-async function sourceMinfin() {
+// 🟢 1. курс НБУ
+async function getFX() {
   const { data } = await axios.get(
-    "https://index.minfin.com.ua/ua/markets/fuel/",
-    { timeout: 8000 }
+    "https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange?json"
   );
 
-  const extract = (label) => {
-    const r = new RegExp(label + "[^0-9]*([0-9]+\\.[0-9]+)");
-    const m = data.match(r);
-    return m ? parseFloat(m[1]) : null;
-  };
+  const usd = data.find(x => x.cc === "USD");
+  return usd ? usd.rate : 41.5; // fallback
+}
 
+// 🟡 2. базова світова ціна пального (USD)
+function getGlobalFuelUSD() {
   return {
-    a95: extract("А-95"),
-    diesel: extract("ДП"),
-    lpg: extract("Газ")
+    a95: 1.52,
+    diesel: 1.45,
+    lpg: 0.85
   };
 }
 
-// 🔥 SOURCE 2 — резерв (поки симуляція стабільного ринку)
-async function sourceBackup() {
-  // тут можна підключити другий агрегатор пізніше
+// 🔥 конвертація
+function convertToUAH(fuelUSD, fx) {
   return {
-    a95: fallback.a95,
-    diesel: fallback.diesel,
-    lpg: fallback.lpg
+    a95: (fuelUSD.a95 * fx).toFixed(2),
+    diesel: (fuelUSD.diesel * fx).toFixed(2),
+    lpg: (fuelUSD.lpg * fx).toFixed(2)
   };
-}
-
-// 🔥 weighted average
-function avg(v1, v2, w1 = 0.6, w2 = 0.4) {
-  if (v1 && v2) return ((v1 * w1) + (v2 * w2)).toFixed(2);
-  return (v1 || v2 || null);
 }
 
 app.get("/fuel.json", async (req, res) => {
@@ -59,26 +45,16 @@ app.get("/fuel.json", async (req, res) => {
       return res.json({ ...cache, cached: true });
     }
 
-    let s1 = null;
-    let s2 = null;
-
-    try {
-      s1 = await sourceMinfin();
-    } catch (e) {}
-
-    try {
-      s2 = await sourceBackup();
-    } catch (e) {}
+    const fx = await getFX();
+    const usd = getGlobalFuelUSD();
+    const uah = convertToUAH(usd, fx);
 
     const result = {
-      ukraine: {
-        a95: avg(s1?.a95, s2?.a95) || fallback.a95,
-        diesel: avg(s1?.diesel, s2?.diesel) || fallback.diesel,
-        lpg: avg(s1?.lpg, s2?.lpg) || fallback.lpg
-      },
+      ukraine: uah,
+      fx: fx,
+      base_usd: usd,
       updated: new Date().toISOString(),
-      sources: ["minfin", "backup"],
-      mode: "PRO_A"
+      mode: "FX_FUEL_INDEX"
     };
 
     cache = result;
@@ -88,15 +64,15 @@ app.get("/fuel.json", async (req, res) => {
 
   } catch (e) {
     res.json({
-      ukraine: fallback,
-      error: "fallback_only",
-      updated: new Date().toISOString()
+      error: "fx_index_fallback",
+      ukraine: {
+        a95: "—",
+        diesel: "—",
+        lpg: "—"
+      }
     });
   }
 });
 
 const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, () => {
-  console.log("PRO A Aggregator running on " + PORT);
-});
+app.listen(PORT, () => console.log("FX Fuel Index running"));
