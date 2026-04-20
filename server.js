@@ -1,48 +1,59 @@
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
-const cheerio = require("cheerio");
 
 const app = express();
 app.use(cors());
 
+// 🔥 кеш (10 хв)
+let cache = null;
+let cacheTime = 0;
+
+const CACHE_TTL = 10 * 60 * 1000;
+
+// 🔹 fallback джерела (можеш додавати свої)
+const sources = [
+  "https://fuel-api-78ht.onrender.com/fuel.json", // твій же (для тесту)
+];
+
+async function fetchFromSources() {
+  for (let url of sources) {
+    try {
+      const res = await axios.get(url, { timeout: 5000 });
+      if (res.data?.ukraine) {
+        return res.data;
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+  throw new Error("No sources available");
+}
+
 app.get("/fuel.json", async (req, res) => {
   try {
-    const response = await axios.get("https://index.minfin.com.ua/ua/markets/fuel/");
-    const $ = cheerio.load(response.data);
+    const now = Date.now();
 
-    let a95 = "—";
-    let diesel = "—";
-    let lpg = "—";
+    // 🔥 якщо кеш ще живий
+    if (cache && now - cacheTime < CACHE_TTL) {
+      return res.json({ ...cache, cached: true });
+    }
 
-    $("table tr").each((i, el) => {
-  const tds = $(el).find("td");
+    const data = await fetchFromSources();
 
-  const name = $(el).find("th, td").first().text();
+    cache = data;
+    cacheTime = now;
 
-  const price = tds.eq(tds.length - 1).text().trim();
-
-  if (name.includes("А-95")) {
-    a95 = price;
-  }
-
-  if (name.includes("ДП")) {
-    diesel = price;
-  }
-
-  if (name.includes("Газ")) {
-    lpg = price;
-  }
-});
-
-    res.json({
-      ukraine: { a95, diesel, lpg },
-      updated: new Date().toISOString()
-    });
+    res.json({ ...data, cached: false });
 
   } catch (e) {
     res.json({
-      error: "parse error",
+      error: "no_data_available",
+      ukraine: {
+        a95: "—",
+        diesel: "—",
+        lpg: "—"
+      },
       updated: new Date().toISOString()
     });
   }
@@ -51,5 +62,5 @@ app.get("/fuel.json", async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
+  console.log("Fuel aggregator running on " + PORT);
 });
