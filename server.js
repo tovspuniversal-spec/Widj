@@ -1,42 +1,26 @@
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
-const cheerio = require("cheerio");
 
 const app = express();
 app.use(cors());
 
 app.get("/fuel.json", async (req, res) => {
   try {
-    const response = await axios.get("https://index.minfin.com.ua/ua/markets/fuel/");
-    const $ = cheerio.load(response.data);
+    const { data } = await axios.get("https://index.minfin.com.ua/ua/markets/fuel/");
 
-    let a95 = "—";
-    let diesel = "—";
-    let lpg = "—";
-
-    $("table tr").each((i, el) => {
-      const tds = $(el).find("td");
-      const title = $(el).find("th, td").first().text().trim();
-
-      // 🔥 ВАЖЛИВО: беремо НЕ останню, а ПЕРЕДОСТАННЮ (ціна)
-      const price = tds.eq(1).text().trim();
-
-      if (title.includes("А-95") && price) {
-        a95 = price;
-      }
-
-      if ((title.includes("ДП") || title.includes("Дизель")) && price) {
-        diesel = price;
-      }
-
-      if (title.includes("Газ") && price) {
-        lpg = price;
-      }
-    });
+    const clean = (label) => {
+      const regex = new RegExp(label + "[^0-9]*([0-9]+\\.[0-9]+)");
+      const match = data.match(regex);
+      return match ? match[1] : "—";
+    };
 
     res.json({
-      ukraine: { a95, diesel, lpg },
+      ukraine: {
+        a95: clean("А-95"),
+        diesel: clean("ДП"),
+        lpg: clean("Газ")
+      },
       updated: new Date().toISOString()
     });
 
