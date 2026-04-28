@@ -1,52 +1,43 @@
-const express = require("express");
-const cors = require("cors");
-const axios = require("axios");
+import express from "express";
+import fetch from "node-fetch";
+import * as cheerio from "cheerio";
 
 const app = express();
-app.use(cors());
 
-// 🔥 OpenVan endpoint (може змінюватись)
-const OPENVAN_URL = "https://openvan.camp/api/fuel_prices/ukraine";
-
-// fallback (якщо API впаде)
-const fallback = {
-  a95: 72.0,
-  diesel: 87.0,
-  lpg: 32.0
-};
-
-function parseOpenVan(data) {
+app.get("/api/fuel", async (req, res) => {
   try {
-    return {
-      a95: parseFloat(data.gasoline_95),
-      diesel: parseFloat(data.diesel),
-      lpg: parseFloat(data.lpg)
-    };
-  } catch {
-    return fallback;
-  }
-}
+    const url = "https://e-palne.com/ua/kyiv/";
 
-app.get("/fuel.json", async (req, res) => {
-  try {
-    const response = await axios.get(OPENVAN_URL);
-
-    const prices = parseOpenVan(response.data);
-
-    res.json({
-      ukraine: prices,
-      source: "openvan",
-      updated: new Date().toISOString()
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0"
+      }
     });
 
-  } catch (err) {
-    res.json({
-      ukraine: fallback,
-      source: "fallback",
-      updated: new Date().toISOString()
+    const html = await response.text();
+    const $ = cheerio.load(html);
+
+    // ⚠️ Селектори треба під сайт (можуть змінюватись)
+    let diesel = null;
+
+    $("body").each((i, el) => {
+      const text = $(el).text();
+
+      const match = text.match(/ДП[^0-9]+([0-9]+[.,][0-9]+)/);
+      if (match) {
+        diesel = match[1].replace(",", ".");
+      }
     });
+
+    if (!diesel) throw "No diesel found";
+
+    res.json({
+      diesel: parseFloat(diesel)
+    });
+
+  } catch (e) {
+    res.status(500).json({ error: "parse error" });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Fuel API running"));
+app.listen(3000, () => console.log("Server running"));
