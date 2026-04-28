@@ -1,7 +1,7 @@
 import express from "express";
-import fetch from "node-fetch";
 import * as cheerio from "cheerio";
 
+const response = await fetch(url);
 const app = express();
 
 app.get("/api/fuel", async (req, res) => {
