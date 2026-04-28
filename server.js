@@ -1,10 +1,20 @@
 import express from "express";
 import * as cheerio from "cheerio";
 
-const response = await fetch(url);
 const app = express();
+const PORT = process.env.PORT || 3000;
+
+let cache = null;
+let lastFetch = 0;
 
 app.get("/api/fuel", async (req, res) => {
+  const now = Date.now();
+
+  // кеш 30 хв
+  if (cache && now - lastFetch < 1800000) {
+    return res.json(cache);
+  }
+
   try {
     const url = "https://e-palne.com/ua/kyiv/";
 
@@ -17,27 +27,6 @@ app.get("/api/fuel", async (req, res) => {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    // ⚠️ Селектори треба під сайт (можуть змінюватись)
     let diesel = null;
 
-    $("body").each((i, el) => {
-      const text = $(el).text();
-
-      const match = text.match(/ДП[^0-9]+([0-9]+[.,][0-9]+)/);
-      if (match) {
-        diesel = match[1].replace(",", ".");
-      }
-    });
-
-    if (!diesel) throw "No diesel found";
-
-    res.json({
-      diesel: parseFloat(diesel)
-    });
-
-  } catch (e) {
-    res.status(500).json({ error: "parse error" });
-  }
-});
-
-app.listen(3000, () => console.log("Server running"));
+    const text = $("body").text(
