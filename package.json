@@ -1,7 +1,7 @@
 {
   "name": "fuel-api",
   "version": "1.0.0",
-  "description": "Fuel price parser (ePalne) for Ukraine",
+  "description": "Fuel prices scraper (AUTO.RIA) with Puppeteer",
   "main": "server.js",
   "type": "module",
   "scripts": {
@@ -12,6 +12,6 @@
   },
   "dependencies": {
     "express": "^4.18.2",
-    "cheerio": "^1.0.0"
+    "puppeteer": "^23.0.0"
   }
 }
