@@ -1,5 +1,5 @@
 import express from "express";
-import * as cheerio from "cheerio";
+import puppeteer from "puppeteer";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -7,57 +7,57 @@ const PORT = process.env.PORT || 10000;
 let cache = null;
 let lastFetch = 0;
 
-async function fetchMinfinPrice(url, label) {
-  const res = await fetch(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0",
-      "Accept-Language": "uk-UA,uk;q=0.9,en;q=0.8"
-    }
+async function getPrice(url, keyword) {
+  const browser = await puppeteer.launch({
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox"
+    ]
   });
 
-  const html = await res.text();
+  const page = await browser.newPage();
 
-  if (!html || html.length < 1000) {
-    throw new Error("Blocked HTML");
-  }
+  await page.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+  );
 
-  const $ = cheerio.load(html);
-
-  // беремо таблицю з цінами
-  const rows = $("table tr");
-
-  let price = null;
-
-  rows.each((_, el) => {
-    const text = $(el).text();
-
-    // шукаємо рядок з потрібним паливом
-    if (text.toLowerCase().includes(label)) {
-      const match = text.match(/[0-9]{2,3}[.,][0-9]{1,2}/);
-
-      if (match) {
-        price = parseFloat(match[0].replace(",", "."));
-      }
-    }
+  await page.goto(url, {
+    waitUntil: "networkidle2",
+    timeout: 60000
   });
 
-  if (!price) {
-    throw new Error(`Price not found for ${label}`);
-  }
+  const text = await page.evaluate(() =>
+    document.body.innerText
+  );
 
-  return price;
+  await browser.close();
+
+  const matches = text.match(/[0-9]{2}\.[0-9]{2}/g);
+
+  if (!matches) return null;
+
+  const nums = matches.map(n => parseFloat(n));
+
+  const filtered = nums.filter(
+    n => n > 30 && n < 80
+  );
+
+  if (!filtered.length) return null;
+
+  return (
+    filtered.reduce((a, b) => a + b, 0) /
+    filtered.length
+  );
 }
 
-// root
 app.get("/", (req, res) => {
-  res.send("Minfin Fuel API 🚀");
+  res.send("Fuel Puppeteer API 🚀");
 });
 
 app.get("/health", (req, res) => {
-  res.status(200).send("OK");
+  res.send("OK");
 });
 
-// API
 app.get("/api/fuel", async (req, res) => {
   const now = Date.now();
 
@@ -67,19 +67,19 @@ app.get("/api/fuel", async (req, res) => {
 
   try {
     const dieselUrl =
-      "https://index.minfin.com.ua/ua/markets/fuel/dt/";
+      "https://auto.ria.com/uk/toplivo/dt/";
 
-    const petrolUrl =
-      "https://index.minfin.com.ua/ua/markets/fuel/a95/";
+    const gasolineUrl =
+      "https://auto.ria.com/uk/toplivo/a95/";
 
     const [diesel, gasoline] = await Promise.all([
-      fetchMinfinPrice(dieselUrl, "дизель"),
-      fetchMinfinPrice(petrolUrl, "а-95")
+      getPrice(dieselUrl, "дизель"),
+      getPrice(gasolineUrl, "а-95")
     ]);
 
     cache = {
-      diesel,
-      gasoline
+      diesel: Number(diesel.toFixed(2)),
+      gasoline: Number(gasoline.toFixed(2))
     };
 
     lastFetch = now;
@@ -87,12 +87,12 @@ app.get("/api/fuel", async (req, res) => {
     res.json(cache);
 
   } catch (err) {
-    console.error("ERROR:", err.message);
+    console.error(err);
 
     if (cache) return res.json(cache);
 
     res.status(500).json({
-      error: "parse error (minfin structure changed)"
+      error: "puppeteer parse error"
     });
   }
 });
