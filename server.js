@@ -1,13 +1,12 @@
 import express from "express";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 let cache = null;
 let lastFetch = 0;
 
 async function fetchHTML(url) {
-  // 1. пробуємо напряму
   try {
     const res = await fetch(url, {
       headers: {
@@ -19,39 +18,84 @@ async function fetchHTML(url) {
 
     const html = await res.text();
 
-    if (html && html.length > 1000) {
-      return html;
-    }
+    if (html && html.length > 1000) return html;
 
-    throw new Error("Direct fetch blocked");
+    throw new Error("Blocked response");
   } catch (e) {
-    // 2. fallback через проксі
-    const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
+    const proxy =
+      "https://api.allorigins.win/raw?url=" +
+      encodeURIComponent(url);
 
     const res = await fetch(proxy);
-    const html = await res.text();
-
-    return html;
+    return await res.text();
   }
 }
 
 function extractDiesel(html) {
-  // знаходимо всі числа типу 52.90
   const matches = html.match(/[0-9]{2}\.[0-9]{2}/g);
 
   if (!matches) return null;
 
   const nums = matches.map(n => parseFloat(n));
 
-  // залишаємо тільки адекватні ціни
   const filtered = nums.filter(n => n > 40 && n < 80);
 
   if (!filtered.length) return null;
 
-  // середнє значення
-  const avg = filtered.reduce((a, b) => a + b, 0) / filtered.length;
+  const avg =
+    filtered.reduce((a, b) => a + b, 0) / filtered.length;
 
   return avg;
 }
 
-app
+// health check (ВАЖЛИВО для Render)
+app.get("/", (req, res) => {
+  res.send("Fuel API is running 🚀");
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
+
+app.get("/api/fuel", async (req, res) => {
+  const now = Date.now();
+
+  // кеш 30 хв
+  if (cache && now - lastFetch < 1800000) {
+    return res.json(cache);
+  }
+
+  try {
+    const url = "https://e-palne.com/ua/kyiv/";
+
+    const html = await fetchHTML(url);
+
+    if (!html || html.length < 1000) {
+      throw new Error("Empty HTML");
+    }
+
+    const diesel = extractDiesel(html);
+
+    if (!diesel) {
+      throw new Error("Diesel not found");
+    }
+
+    cache = {
+      diesel: parseFloat(diesel.toFixed(2))
+    };
+
+    lastFetch = now;
+
+    res.json(cache);
+  } catch (err) {
+    console.error("ERROR:", err.message);
+
+    if (cache) return res.json(cache);
+
+    res.status(500).json({ error: "parse error" });
+  }
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+});
