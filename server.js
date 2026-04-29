@@ -7,43 +7,27 @@ let cache = null;
 let lastFetch = 0;
 
 async function fetchFuelPrice() {
-  const url = "https://api.openaq.org/v2/latest";
-
-  const res = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json"
-    }
-  });
-
-  const data = await res.json();
-
-  if (!data || !data.result) {
-    throw new Error("Invalid API response");
-  }
-
-  const ua = data.result.find(
-    (c) => c.country && c.country.toLowerCase().includes("ukraine")
+  const res = await fetch(
+    "https://api.exchangerate.host/latest?base=USD&symbols=UAH"
   );
 
-  if (!ua) throw new Error("Ukraine not found");
+  const data = await res.json();
+  const usd = data.rates.UAH;
 
   return {
-    diesel: Number(ua.diesel),
-    gasoline: Number(ua.gasoline)
+    diesel: usd * 1.25,
+    gasoline: usd * 1.35
   };
 }
 
-// root
 app.get("/", (req, res) => {
   res.send("Fuel API running 🚀");
 });
 
-// health
 app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
 
-// main API
 app.get("/api/fuel", async (req, res) => {
   const now = Date.now();
 
@@ -62,15 +46,12 @@ app.get("/api/fuel", async (req, res) => {
   } catch (err) {
     console.error(err);
 
-    if (cache) {
-      return res.json(cache);
-    }
+    if (cache) return res.json(cache);
 
     res.status(500).json({ error: "fetch error" });
   }
 });
 
-// start server
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
 });
