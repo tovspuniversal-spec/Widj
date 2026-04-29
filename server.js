@@ -47,8 +47,12 @@ async function getPrice(url) {
   });
 
   await browser.close();
+if (!price) {
+  console.log("Fallback used for:", url);
+  return null;
+}
 
-  return price;
+return price;
 }
 
 
