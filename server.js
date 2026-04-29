@@ -1,5 +1,4 @@
 import express from "express";
-import * as cheerio from "cheerio";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -7,64 +6,52 @@ const PORT = process.env.PORT || 3000;
 let cache = null;
 let lastFetch = 0;
 
-app.get("/api/fuel", async (req, res) => {
-  const now = Date.now();
-
-  // кеш 30 хв
-  if (cache && now - lastFetch < 1800000) {
-    return res.json(cache);
-  }
-
+async function fetchHTML(url) {
+  // 1. пробуємо напряму
   try {
-    const url = "https://e-palne.com/ua/kyiv/";
-
-    const response = await fetch(url, {
+    const res = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "uk-UA,uk;q=0.9,en;q=0.8"
       }
     });
 
-    const html = await response.text();
-    const $ = cheerio.load(html);
+    const html = await res.text();
 
-   let diesel = null;
+    if (html && html.length > 1000) {
+      return html;
+    }
 
-// беремо всі числа схожі на ціну
-const matches = html.match(/[0-9]{2}\.[0-9]{2}/g);
+    throw new Error("Direct fetch blocked");
+  } catch (e) {
+    // 2. fallback через проксі
+    const proxy = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
 
-if (matches && matches.length) {
-  // беремо середнє значення як найбільш реалістичне
-  const nums = matches.map(n => parseFloat(n));
-  const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+    const res = await fetch(proxy);
+    const html = await res.text();
 
-  diesel = avg;
+    return html;
+  }
 }
 
+function extractDiesel(html) {
+  // знаходимо всі числа типу 52.90
+  const matches = html.match(/[0-9]{2}\.[0-9]{2}/g);
 
-    if (match) {
-      diesel = parseFloat(match[1].replace(",", "."));
-    }
+  if (!matches) return null;
 
-    if (!diesel) {
-      throw new Error("Diesel not found");
-    }
+  const nums = matches.map(n => parseFloat(n));
 
-    cache = { diesel };
-    lastFetch = now;
+  // залишаємо тільки адекватні ціни
+  const filtered = nums.filter(n => n > 40 && n < 80);
 
-    res.json(cache);
+  if (!filtered.length) return null;
 
-  } catch (err) {
-    console.error(err);
+  // середнє значення
+  const avg = filtered.reduce((a, b) => a + b, 0) / filtered.length;
 
-    if (cache) {
-      return res.json(cache);
-    }
+  return avg;
+}
 
-    res.status(500).json({ error: "parse error" });
-  }
-});
-
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+app
