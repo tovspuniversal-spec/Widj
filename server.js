@@ -1,4 +1,5 @@
 import express from "express";
+import * as cheerio from "cheerio";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -6,22 +7,44 @@ const PORT = process.env.PORT || 10000;
 let cache = null;
 let lastFetch = 0;
 
-async function fetchFuelPrice() {
-  const res = await fetch(
-    "https://auto.ria.com/uk/toplivo/dt/"
-  );
+async function fetchPagePrice(url) {
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "uk-UA,uk;q=0.9,en;q=0.8"
+    }
+  });
 
-  const data = await res.json();
-  const usd = data.rates.UAH;
+  const html = await res.text();
 
-  return {
-    diesel: usd * 1.25,
-    gasoline: usd * 1.35
-  };
+  if (!html || html.length < 1000) {
+    throw new Error("Blocked or empty response");
+  }
+
+  const $ = cheerio.load(html);
+  const text = $("body").text();
+
+  // всі ціни типу 52.99
+  const matches = text.match(/[0-9]{2}\.[0-9]{2}/g);
+
+  if (!matches) return null;
+
+  const nums = matches.map(n => parseFloat(n));
+
+  // фільтр реальних паливних цін
+  const filtered = nums.filter(n => n > 30 && n < 80);
+
+  if (!filtered.length) return null;
+
+  const avg =
+    filtered.reduce((a, b) => a + b, 0) / filtered.length;
+
+  return parseFloat(avg.toFixed(2));
 }
 
 app.get("/", (req, res) => {
-  res.send("Fuel API running 🚀");
+  res.send("AUTO.RIA Fuel API 🚀");
 });
 
 app.get("/health", (req, res) => {
@@ -36,19 +59,35 @@ app.get("/api/fuel", async (req, res) => {
   }
 
   try {
-    const prices = await fetchFuelPrice();
+    const dieselUrl = "https://auto.ria.com/uk/toplivo/dt/";
+    const gasolineUrl = "https://auto.ria.com/uk/toplivo/a95/";
 
-    cache = prices;
+    const [diesel, gasoline] = await Promise.all([
+      fetchPagePrice(dieselUrl),
+      fetchPagePrice(gasolineUrl)
+    ]);
+
+    if (!diesel || !gasoline) {
+      throw new Error("Prices not found");
+    }
+
+    cache = {
+      diesel,
+      gasoline
+    };
+
     lastFetch = now;
 
     res.json(cache);
 
   } catch (err) {
-    console.error(err);
+    console.error("ERROR:", err.message);
 
     if (cache) return res.json(cache);
 
-    res.status(500).json({ error: "fetch error" });
+    res.status(500).json({
+      error: "parse error (AUTO.RIA changed layout or blocked)"
+    });
   }
 });
 
