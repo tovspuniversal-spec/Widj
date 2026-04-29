@@ -27,40 +27,30 @@ async function getPrice(url) {
     timeout: 60000
   });
 
-  // чекаємо будь-який текст з цінами
-  await page.waitForSelector("body");
+  // чекаємо рендер
+  await new Promise(r => setTimeout(r, 3000));
 
   const price = await page.evaluate(() => {
-    // шукаємо всі числа з крапкою
+    // беремо всі числа на сторінці
     const matches = document.body.innerText.match(/[0-9]{2}\.[0-9]{2}/g);
 
     if (!matches) return null;
 
-    const valid = matches
+    const nums = matches
       .map(n => parseFloat(n))
-      .filter(n => n > 40 && n < 80); // більш жорсткий фільтр
+      .filter(n => n > 45 && n < 80);
 
-    if (!valid.length) return null;
+    if (!nums.length) return null;
 
-    // беремо найбільш часте значення (стабільніше)
-    const freq = {};
-    valid.forEach(n => {
-      freq[n] = (freq[n] || 0) + 1;
-    });
-
-    return Object.keys(freq).reduce((a, b) =>
-      freq[a] > freq[b] ? a : b
-    );
+    // беремо середнє (стабільніше)
+    return nums.reduce((a, b) => a + b, 0) / nums.length;
   });
 
   await browser.close();
 
-  if (!price) {
-    throw new Error("Price not found");
-  }
-
-  return parseFloat(price);
+  return price;
 }
+
 
 app.get("/", (req, res) => {
   res.send("Fuel Puppeteer API 🚀");
