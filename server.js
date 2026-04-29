@@ -80,9 +80,10 @@ app.get("/api/fuel", async (req, res) => {
     ]);
 
     cache = {
-      diesel: Number(diesel.toFixed(2)),
-      gasoline: Number(gasoline.toFixed(2))
-    };
+  diesel: diesel ? Number(diesel.toFixed(2)) : 55,
+  gasoline: gasoline ? Number(gasoline.toFixed(2)) : 58
+};
+
 
     lastFetch = now;
 
