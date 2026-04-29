@@ -10,11 +10,8 @@ async function fetchFuelPrice() {
   const url = "https://api.collectapi.com/gasPrice/allCountries";
 
   const res = await fetch(url, {
-    method: "GET",
     headers: {
-      "Content-Type": "application/json",
-      // якщо API попросить ключ — додаси сюди
-      // "authorization": "apikey YOUR_KEY"
+      "Content-Type": "application/json"
     }
   });
 
@@ -24,34 +21,32 @@ async function fetchFuelPrice() {
     throw new Error("Invalid API response");
   }
 
-  // шукаємо Україну
   const ua = data.result.find(
-    (c) =>
-      c.country &&
-      c.country.toLowerCase().includes("ukraine")
+    (c) => c.country && c.country.toLowerCase().includes("ukraine")
   );
 
   if (!ua) throw new Error("Ukraine not found");
 
   return {
-    gasoline: parseFloat(ua.gasoline),
-    diesel: parseFloat(ua.diesel)
+    diesel: Number(ua.diesel),
+    gasoline: Number(ua.gasoline)
   };
 }
 
-// health check
+// root
 app.get("/", (req, res) => {
-  res.send("Fuel API (GlobalPetrolPrices) running 🚀");
+  res.send("Fuel API running 🚀");
 });
 
+// health
 app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
 
+// main API
 app.get("/api/fuel", async (req, res) => {
   const now = Date.now();
 
-  // кеш 30 хв
   if (cache && now - lastFetch < 1800000) {
     return res.json(cache);
   }
@@ -59,19 +54,23 @@ app.get("/api/fuel", async (req, res) => {
   try {
     const prices = await fetchFuelPrice();
 
-    cache = {
-      diesel: prices.diesel,
-      gasoline: prices.gasoline
-    };
-
+    cache = prices;
     lastFetch = now;
 
     res.json(cache);
 
   } catch (err) {
-    console.error("ERROR:", err.message);
+    console.error(err);
 
-    if (cache) return res.json(cache);
+    if (cache) {
+      return res.json(cache);
+    }
 
-    res.status(500).json({
-      err
+    res.status(500).json({ error: "fetch error" });
+  }
+});
+
+// start server
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+});
