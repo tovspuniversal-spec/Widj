@@ -6,51 +6,42 @@ const PORT = process.env.PORT || 10000;
 let cache = null;
 let lastFetch = 0;
 
-async function fetchHTML(url) {
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept": "text/html,application/xhtml+xml",
-        "Accept-Language": "uk-UA,uk;q=0.9,en;q=0.8"
-      }
-    });
+async function fetchFuelPrice() {
+  const url = "https://api.collectapi.com/gasPrice/allCountries";
 
-    const html = await res.text();
+  const res = await fetch(url, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json",
+      // якщо API попросить ключ — додаси сюди
+      // "authorization": "apikey YOUR_KEY"
+    }
+  });
 
-    if (html && html.length > 1000) return html;
+  const data = await res.json();
 
-    throw new Error("Blocked response");
-  } catch (e) {
-    const proxy =
-      "https://api.allorigins.win/raw?url=" +
-      encodeURIComponent(url);
-
-    const res = await fetch(proxy);
-    return await res.text();
+  if (!data || !data.result) {
+    throw new Error("Invalid API response");
   }
+
+  // шукаємо Україну
+  const ua = data.result.find(
+    (c) =>
+      c.country &&
+      c.country.toLowerCase().includes("ukraine")
+  );
+
+  if (!ua) throw new Error("Ukraine not found");
+
+  return {
+    gasoline: parseFloat(ua.gasoline),
+    diesel: parseFloat(ua.diesel)
+  };
 }
 
-function extractDiesel(html) {
-  const matches = html.match(/[0-9]{2}\.[0-9]{2}/g);
-
-  if (!matches) return null;
-
-  const nums = matches.map(n => parseFloat(n));
-
-  const filtered = nums.filter(n => n > 40 && n < 80);
-
-  if (!filtered.length) return null;
-
-  const avg =
-    filtered.reduce((a, b) => a + b, 0) / filtered.length;
-
-  return avg;
-}
-
-// health check (ВАЖЛИВО для Render)
+// health check
 app.get("/", (req, res) => {
-  res.send("Fuel API is running 🚀");
+  res.send("Fuel API (GlobalPetrolPrices) running 🚀");
 });
 
 app.get("/health", (req, res) => {
@@ -66,36 +57,21 @@ app.get("/api/fuel", async (req, res) => {
   }
 
   try {
-    const url = "https://e-palne.com/ua/kyiv/";
-
-    const html = await fetchHTML(url);
-
-    if (!html || html.length < 1000) {
-      throw new Error("Empty HTML");
-    }
-
-    const diesel = extractDiesel(html);
-
-    if (!diesel) {
-      throw new Error("Diesel not found");
-    }
+    const prices = await fetchFuelPrice();
 
     cache = {
-      diesel: parseFloat(diesel.toFixed(2))
+      diesel: prices.diesel,
+      gasoline: prices.gasoline
     };
 
     lastFetch = now;
 
     res.json(cache);
+
   } catch (err) {
     console.error("ERROR:", err.message);
 
     if (cache) return res.json(cache);
 
-    res.status(500).json({ error: "parse error" });
-  }
-});
-
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on port ${PORT}`);
-});
+    res.status(500).json({
+      err
