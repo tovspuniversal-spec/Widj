@@ -71,4 +71,36 @@ app.get("/api/fuel", async (req, res) => {
 
   try {
     const dieselUrl =
-      "https://auto.ria.com/uk/topl
+      "https://auto.ria.com/uk/toplivo/dt/";
+
+    const gasolineUrl =
+      "https://auto.ria.com/uk/toplivo/a95/";
+
+    const [diesel, gasoline] = await Promise.all([
+      getPrice(dieselUrl),
+      getPrice(gasolineUrl)
+    ]);
+
+    cache = {
+      diesel: Number(diesel.toFixed(2)),
+      gasoline: Number(gasoline.toFixed(2))
+    };
+
+    lastFetch = now;
+
+    res.json(cache);
+
+  } catch (err) {
+    console.error("ERROR:", err.message);
+
+    if (cache) return res.json(cache);
+
+    res.status(500).json({
+      error: "puppeteer parse error"
+    });
+  }
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
+});
