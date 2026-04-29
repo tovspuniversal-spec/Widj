@@ -7,7 +7,7 @@ let cache = null;
 let lastFetch = 0;
 
 async function fetchFuelPrice() {
-  const url = "https://api.collectapi.com/gasPrice/allCountries";
+  const url = "https://api.openaq.org/v2/latest";
 
   const res = await fetch(url, {
     headers: {
