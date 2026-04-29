@@ -7,13 +7,49 @@ const PORT = process.env.PORT || 10000;
 let cache = null;
 let lastFetch = 0;
 
-async function getPrice(url, keyword) {
+async function getPrice(url) {
   const browser = await puppeteer.launch({
     args: [
       "--no-sandbox",
-      "--disable-setuid-sandbox"
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage"
     ]
   });
+
+  const page = await browser.newPage();
+
+  await page.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+  );
+
+  await page.goto(url, {
+    waitUntil: "networkidle2",
+    timeout: 60000
+  });
+
+  // чекаємо появу цін
+  await page.waitForSelector("body");
+
+  const price = await page.evaluate(() => {
+    const text = document.body.innerText;
+
+    // беремо тільки першу адекватну ціну
+    const match = text.match(/[0-9]{2}\.[0-9]{2}/);
+
+    if (!match) return null;
+
+    return parseFloat(match[0]);
+  });
+
+  await browser.close();
+
+  if (!price || price < 30 || price > 80) {
+    throw new Error("Invalid price");
+  }
+
+  return price;
+}
+
 
   const page = await browser.newPage();
 
