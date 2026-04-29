@@ -27,6 +27,37 @@ app.get("/api/fuel", async (req, res) => {
     const html = await response.text();
     const $ = cheerio.load(html);
 
+    const text = $("body").text();
+
     let diesel = null;
 
-    const text = $("body").text(
+    // шукаємо число після "ДП"
+    const match = text.match(/ДП[^0-9]*([0-9]+[.,][0-9]+)/);
+
+    if (match) {
+      diesel = parseFloat(match[1].replace(",", "."));
+    }
+
+    if (!diesel) {
+      throw new Error("Diesel not found");
+    }
+
+    cache = { diesel };
+    lastFetch = now;
+
+    res.json(cache);
+
+  } catch (err) {
+    console.error(err);
+
+    if (cache) {
+      return res.json(cache);
+    }
+
+    res.status(500).json({ error: "parse error" });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
