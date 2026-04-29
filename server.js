@@ -27,12 +27,19 @@ app.get("/api/fuel", async (req, res) => {
     const html = await response.text();
     const $ = cheerio.load(html);
 
-    const text = $("body").text();
+   let diesel = null;
 
-    let diesel = null;
+// беремо всі числа схожі на ціну
+const matches = html.match(/[0-9]{2}\.[0-9]{2}/g);
 
-    // шукаємо число після "ДП"
-    const match = text.match(/ДП[^0-9]*([0-9]+[.,][0-9]+)/);
+if (matches && matches.length) {
+  // беремо середнє значення як найбільш реалістичне
+  const nums = matches.map(n => parseFloat(n));
+  const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+
+  diesel = avg;
+}
+
 
     if (match) {
       diesel = parseFloat(match[1].replace(",", "."));
