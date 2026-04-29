@@ -7,11 +7,10 @@ const PORT = process.env.PORT || 10000;
 let cache = null;
 let lastFetch = 0;
 
-async function fetchPagePrice(url) {
+async function fetchMinfinPrice(url, label) {
   const res = await fetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0",
-      "Accept": "text/html,application/xhtml+xml",
       "Accept-Language": "uk-UA,uk;q=0.9,en;q=0.8"
     }
   });
@@ -19,38 +18,46 @@ async function fetchPagePrice(url) {
   const html = await res.text();
 
   if (!html || html.length < 1000) {
-    throw new Error("Blocked or empty response");
+    throw new Error("Blocked HTML");
   }
 
   const $ = cheerio.load(html);
-  const text = $("body").text();
 
-  // всі ціни типу 52.99
-  const matches = text.match(/[0-9]{2}\.[0-9]{2}/g);
+  // беремо таблицю з цінами
+  const rows = $("table tr");
 
-  if (!matches) return null;
+  let price = null;
 
-  const nums = matches.map(n => parseFloat(n));
+  rows.each((_, el) => {
+    const text = $(el).text();
 
-  // фільтр реальних паливних цін
-  const filtered = nums.filter(n => n > 30 && n < 80);
+    // шукаємо рядок з потрібним паливом
+    if (text.toLowerCase().includes(label)) {
+      const match = text.match(/[0-9]{2,3}[.,][0-9]{1,2}/);
 
-  if (!filtered.length) return null;
+      if (match) {
+        price = parseFloat(match[0].replace(",", "."));
+      }
+    }
+  });
 
-  const avg =
-    filtered.reduce((a, b) => a + b, 0) / filtered.length;
+  if (!price) {
+    throw new Error(`Price not found for ${label}`);
+  }
 
-  return parseFloat(avg.toFixed(2));
+  return price;
 }
 
+// root
 app.get("/", (req, res) => {
-  res.send("AUTO.RIA Fuel API 🚀");
+  res.send("Minfin Fuel API 🚀");
 });
 
 app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
 
+// API
 app.get("/api/fuel", async (req, res) => {
   const now = Date.now();
 
@@ -59,17 +66,16 @@ app.get("/api/fuel", async (req, res) => {
   }
 
   try {
-    const dieselUrl = "https://auto.ria.com/uk/toplivo/dt/";
-    const gasolineUrl = "https://auto.ria.com/uk/toplivo/a95/";
+    const dieselUrl =
+      "https://index.minfin.com.ua/ua/markets/fuel/dt/";
+
+    const petrolUrl =
+      "https://index.minfin.com.ua/ua/markets/fuel/a95/";
 
     const [diesel, gasoline] = await Promise.all([
-      fetchPagePrice(dieselUrl),
-      fetchPagePrice(gasolineUrl)
+      fetchMinfinPrice(dieselUrl, "дизель"),
+      fetchMinfinPrice(petrolUrl, "а-95")
     ]);
-
-    if (!diesel || !gasoline) {
-      throw new Error("Prices not found");
-    }
 
     cache = {
       diesel,
@@ -86,7 +92,7 @@ app.get("/api/fuel", async (req, res) => {
     if (cache) return res.json(cache);
 
     res.status(500).json({
-      error: "parse error (AUTO.RIA changed layout or blocked)"
+      error: "parse error (minfin structure changed)"
     });
   }
 });
