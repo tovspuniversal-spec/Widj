@@ -27,22 +27,30 @@ async function getPrice(url) {
     timeout: 60000
   });
 
+  // чекаємо будь-який текст з цінами
   await page.waitForSelector("body");
 
   const price = await page.evaluate(() => {
-    const text = document.body.innerText;
-
-    const matches = text.match(/[0-9]{2}\.[0-9]{2}/g);
+    // шукаємо всі числа з крапкою
+    const matches = document.body.innerText.match(/[0-9]{2}\.[0-9]{2}/g);
 
     if (!matches) return null;
 
     const valid = matches
       .map(n => parseFloat(n))
-      .filter(n => n > 30 && n < 80);
+      .filter(n => n > 40 && n < 80); // більш жорсткий фільтр
 
     if (!valid.length) return null;
 
-    return valid[0];
+    // беремо найбільш часте значення (стабільніше)
+    const freq = {};
+    valid.forEach(n => {
+      freq[n] = (freq[n] || 0) + 1;
+    });
+
+    return Object.keys(freq).reduce((a, b) =>
+      freq[a] > freq[b] ? a : b
+    );
   });
 
   await browser.close();
@@ -51,7 +59,7 @@ async function getPrice(url) {
     throw new Error("Price not found");
   }
 
-  return price;
+  return parseFloat(price);
 }
 
 app.get("/", (req, res) => {
