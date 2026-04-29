@@ -8,7 +8,7 @@ let lastFetch = 0;
 
 async function fetchFuelPrice() {
   const res = await fetch(
-    "https://api.exchangerate.host/latest?base=USD&symbols=UAH"
+    "https://auto.ria.com/uk/toplivo/dt/"
   );
 
   const data = await res.json();
