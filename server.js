@@ -10,51 +10,54 @@ let lastFetch = 0;
 
 async function getDieselPrice() {
   const { data } = await axios.get(
-    "https://besttarif.ua/fuel-informer/",
+    "https://euro5.ua/tsiny-na-palne/",
     {
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept":
-          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "uk-UA,uk;q=0.9,en;q=0.8",
-        "Referer": "https://www.google.com/"
-      },
-      timeout: 15000
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+      }
     }
   );
 
   const $ = cheerio.load(data);
 
-  let dpIndex = -1;
   let price = null;
 
-  const table = $("table").first();
-  const rows = table.find("tr");
+  // 1. знайти елемент з текстом "ДП"
+  const dpCell = $("td, th")
+    .filter((i, el) => $(el).text().trim() === "ДП")
+    .first();
 
-  const headerCells = rows.first().find("th, td");
+  if (!dpCell) return null;
 
-  headerCells.each((i, el) => {
-    const text = $(el).text().trim().toUpperCase();
-    if (text === "ДП") dpIndex = i;
+  // 2. піднятись до рядка
+  const dpRow = dpCell.closest("tr");
+
+  // 3. взяти наступний рядок (де зазвичай ціна)
+  const nextRow = dpRow.next("tr");
+
+  if (!nextRow) return null;
+
+  // 4. взяти всі клітинки
+  const cells = nextRow.find("td, th");
+
+  // 5. шукаємо перше число в рядку
+  cells.each((i, el) => {
+    const text = $(el).text().trim();
+
+    const match = text.match(/(\d+[.,]?\d*)/);
+
+    if (match && !price) {
+      price = parseFloat(match[1].replace(",", "."));
+    }
   });
-
-  if (dpIndex === -1) return null;
-
-  const dataRow = rows.eq(1).find("td, th");
-  const cell = dataRow.eq(dpIndex);
-
-  const match = cell.text().match(/(\d+[.,]?\d*)/);
-
-  price = match ? parseFloat(match[1].replace(",", ".")) : null;
 
   return price;
 }
 
-
 // routes
 app.get("/", (req, res) => {
-  res.send("Diesel API (besttarif) 🚀");
+  res.send("Euro5 Diesel API 🚀");
 });
 
 app.get("/health", (req, res) => {
@@ -78,7 +81,7 @@ app.get("/api/fuel", async (req, res) => {
 
     cache = {
       diesel: Number(diesel.toFixed(2)),
-      source: "besttarif.ua",
+      source: "euro5.ua",
       fuel: "DP",
       updatedAt: new Date().toISOString()
     };
