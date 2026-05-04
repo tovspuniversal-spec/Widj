@@ -5,15 +5,18 @@ import * as cheerio from "cheerio";
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+// кеш
 let cache = null;
 let lastFetch = 0;
 
+// ================= ПАРСЕР =================
 async function getFuelPrices() {
   const { data } = await axios.get("https://oilprice.com.ua/kyiv/", {
     headers: {
       "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-    }
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    },
+    timeout: 15000
   });
 
   const $ = cheerio.load(data);
@@ -21,37 +24,30 @@ async function getFuelPrices() {
   const table = $("table").first();
   const rows = table.find("tr");
 
-  let diesel = null;
-  let gasoline = null;
+  if (rows.length < 2) {
+    throw new Error("Table structure changed");
+  }
 
- const rows = $("table").first().find("tr");
+  // 👉 2-й рядок
+  const row = rows.eq(1);
+  const cells = row.find("td, th");
 
-// 👉 2-й рядок (індекс 1)
-const row = rows.eq(1);
+  if (cells.length < 6) {
+    throw new Error("Not enough columns");
+  }
 
-const cells = row.find("td, th");
+  // 👉 колонки
+  const rawA95 = cells.eq(3).text().trim();
+  const rawDP = cells.eq(5).text().trim();
 
-if (cells.length < 6) return { diesel: null, gasoline: null };
+  // 👉 функція парсингу
+  const parseNumber = (text) => {
+    const match = text.match(/(\d+[.,]?\d*)/);
+    return match ? parseFloat(match[1].replace(",", ".")) : null;
+  };
 
-// 👉 колонки
-const colDP = cells.eq(5).text().trim();   // ДП (6 колонка)
-const colA95 = cells.eq(3).text().trim();  // A95 (4 колонка)
-
-// 👉 парсинг
-const dieselMatch = colDP.match(/(\d+[.,]?\d*)/);
-const gasolineMatch = colA95.match(/(\d+[.,]?\d*)/);
-
-const diesel = dieselMatch
-  ? parseFloat(dieselMatch[1].replace(",", "."))
-  : null;
-
-const gasoline = gasolineMatch
-  ? parseFloat(gasolineMatch[1].replace(",", "."))
-  : null;
-
-return { diesel, gasoline };
-
-  });
+  const gasoline = parseNumber(rawA95);
+  const diesel = parseNumber(rawDP);
 
   return { diesel, gasoline };
 }
@@ -78,7 +74,7 @@ app.get("/api/fuel", async (req, res) => {
     const { diesel, gasoline } = await getFuelPrices();
 
     if (!diesel || !gasoline) {
-      throw new Error("Fuel prices not found");
+      throw new Error("Prices not found");
     }
 
     cache = {
@@ -96,7 +92,10 @@ app.get("/api/fuel", async (req, res) => {
   } catch (err) {
     console.error("ERROR:", err.message);
 
-    if (cache) return res.json(cache);
+    // fallback на кеш
+    if (cache) {
+      return res.json(cache);
+    }
 
     return res.status(500).json({
       error: "parse error",
@@ -104,6 +103,8 @@ app.get("/api/fuel", async (req, res) => {
     });
   }
 });
+
+// ================= START =================
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
