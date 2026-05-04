@@ -1,14 +1,14 @@
 {
   "name": "upg-fuel-api",
-  "version": "1.0.0",
-  "description": "UPG diesel price scraper (vseazs)",
-  "main": "server.js",
+  "version": "1.1.0",
   "type": "module",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "puppeteer": "^22.0.0"
+    "axios": "^1.6.8",
+    "cheerio": "^1.0.0",
+    "express": "^4.19.2"
   }
 }
