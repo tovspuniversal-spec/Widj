@@ -18,40 +18,34 @@ async function getUPGDieselPrice() {
 
   const page = await browser.newPage();
 
-  await page.setUserAgent(
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-  );
-
   await page.goto("https://vseazs.com", {
     waitUntil: "networkidle2",
     timeout: 60000
   });
 
-  await new Promise(r => setTimeout(r, 4000));
+  await new Promise(r => setTimeout(r, 5000));
 
   const price = await page.evaluate(() => {
-    const rows = Array.from(document.querySelectorAll("tr"));
+    const text = document.body.innerText;
 
-    for (const row of rows) {
-      const text = row.innerText;
+    // шукаємо блок з UPG
+    const upgLine = text
+      .split("\n")
+      .find(line => line.includes("UPG"));
 
-      if (text.includes("UPG")) {
-        // шукаємо ціну типу 86.90
-        const match = text.match(/[0-9]{2}\.[0-9]{2}/);
+    if (!upgLine) return null;
 
-        if (match) {
-          return parseFloat(match[0]);
-        }
-      }
-    }
+    // шукаємо число
+    const match = upgLine.match(/[0-9]{2}\.[0-9]{2}/);
 
-    return null;
+    return match ? parseFloat(match[0]) : null;
   });
 
   await browser.close();
 
   return price;
 }
+
 
 app.get("/", (req, res) => {
   res.send("UPG Diesel API 🚀");
