@@ -9,24 +9,30 @@ let cache = null;
 let lastFetch = 0;
 
 async function getUPGDieselPrice() {
-  const { data } = await axios.get("https://auto.ria.com/uk/toplivo/upg/dt/");
+  const { data } = await axios.get("https://vseazs.com");
 
   const $ = cheerio.load(data);
 
-  let price = null;
+  const text = $("body").text();
 
-  $("body").each((_, el) => {
-    const text = $(el).text();
+  // знайти рядок з UPG
+  const line = text
+    .split("\n")
+    .find(l => l.includes("UPG"));
 
-    const match = text.match(/[0-9]{2}\.[0-9]{2}/);
+  if (!line) return null;
 
-    if (match) {
-      price = parseFloat(match[0]);
-    }
-  });
+  // всі числа в рядку
+  const numbers = line.match(/[0-9]{2}\.[0-9]{2}/g);
 
-  return price;
+  if (!numbers || numbers.length < 2) return null;
+
+  // ⚠️ важливо:
+  // [0] = бензин
+  // [1] = дизель (як правило)
+  return parseFloat(numbers[1]);
 }
+
 
 app.get("/", (req, res) => {
   res.send("UPG Diesel API (no puppeteer) 🚀");
