@@ -1,6 +1,5 @@
 import express from "express";
-import axios from "axios";
-import * as cheerio from "cheerio";
+import puppeteer from "puppeteer";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -8,40 +7,64 @@ const PORT = process.env.PORT || 10000;
 let cache = null;
 let lastFetch = 0;
 
-async function getDieselPrice() {
-  const { data } = await axios.get(
-    "https://euro5.ua/tsiny-na-palne/",
-    {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-      }
-    }
+async function getUpgEuroDieselPrice() {
+  const browser = await puppeteer.launch({
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage"
+    ]
+  });
+
+  const page = await browser.newPage();
+
+  await page.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
   );
 
-  const $ = cheerio.load(data);
+  await page.goto("https://upg.ua/", {
+    waitUntil: "networkidle2",
+    timeout: 60000
+  });
 
-  const table = $("table").first();
-  const rows = table.find("tr");
+  // 🔥 чекаємо поки з’явиться блок з цінами
+  await page.waitForSelector("body", { timeout: 15000 });
 
-  // беремо перший рядок з даними (після заголовка)
-  const dataRow = rows.eq(1).find("td, th");
+  const price = await page.evaluate(() => {
+    // 1. знаходимо всі елементи з текстом EURO DIESEL
+    const nodes = Array.from(document.querySelectorAll("*"));
 
-  // ДП = 4 колонка → індекс 3
-  const dpCell = dataRow.eq(3);
+    const euroNode = nodes.find(el =>
+      el.textContent?.includes("EURO DIESEL")
+    );
 
-  if (!dpCell) return null;
+    if (!euroNode) return null;
 
-  const text = dpCell.text().trim();
+    // 2. піднімаємось до логічного контейнера (стабільніше ніж closest div)
+    let container = euroNode;
 
-  const match = text.match(/(\d+[.,]?\d*)/);
+    for (let i = 0; i < 5; i++) {
+      if (!container.parentElement) break;
+      container = container.parentElement;
+    }
 
-  return match ? parseFloat(match[1].replace(",", ".")) : null;
+    const text = container.innerText || "";
+
+    // 3. витягуємо ціну (₴ або просто число)
+    const match = text.match(/(\d{1,3}[.,]?\d{0,2})\s*₴?/);
+
+    return match ? parseFloat(match[1].replace(",", ".")) : null;
+  });
+
+  await browser.close();
+
+  return price;
 }
 
-// routes
+// ================= ROUTES =================
+
 app.get("/", (req, res) => {
-  res.send("Euro5 Diesel API 🚀");
+  res.send("UPG EURO DIESEL PROD API 🚀");
 });
 
 app.get("/health", (req, res) => {
@@ -51,22 +74,22 @@ app.get("/health", (req, res) => {
 app.get("/api/fuel", async (req, res) => {
   const now = Date.now();
 
-  // кеш 30 хв
+  // 🔁 кеш 30 хв
   if (cache && now - lastFetch < 1800000) {
     return res.json(cache);
   }
 
   try {
-    const diesel = await getDieselPrice();
+    const diesel = await getUpgEuroDieselPrice();
 
-    if (!diesel) {
-      throw new Error("DP price not found");
+    if (!diesel || isNaN(diesel)) {
+      throw new Error("EURO DIESEL not found");
     }
 
     cache = {
       diesel: Number(diesel.toFixed(2)),
-      source: "euro5.ua",
-      fuel: "DP",
+      fuel: "EURO_DIESEL",
+      source: "upg.ua",
       updatedAt: new Date().toISOString()
     };
 
@@ -87,5 +110,5 @@ app.get("/api/fuel", async (req, res) => {
 });
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`UPG parser running on port ${PORT}`);
 });
