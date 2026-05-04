@@ -1,15 +1,21 @@
 import express from "express";
 import axios from "axios";
 import * as cheerio from "cheerio";
+import cors from "cors";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// кеш
+app.use(cors());
+
 let cache = null;
 let lastFetch = 0;
 
-// ================= ПАРСЕР =================
+function parseNumber(text) {
+  const match = String(text).match(/(\d+[.,]\d+|\d+)/);
+  return match ? Number(match[1].replace(",", ".")) : null;
+}
+
 async function getFuelPrices() {
   const { data } = await axios.get("https://oilprice.com.ua/kyiv/", {
     headers: {
@@ -20,39 +26,28 @@ async function getFuelPrices() {
   });
 
   const $ = cheerio.load(data);
-
-  const table = $("table").first();
-  const rows = table.find("tr");
+  const rows = $("table").first().find("tr");
 
   if (rows.length < 2) {
     throw new Error("Table structure changed");
   }
 
-  // 👉 2-й рядок
   const row = rows.eq(1);
-  const cells = row.find("td, th");
+  const cells = row.find("td, th").map((_, el) => $(el).text().trim()).get();
 
   if (cells.length < 6) {
-    throw new Error("Not enough columns");
+    throw new Error(`Not enough columns: ${cells.length}`);
   }
 
-  // 👉 колонки
-  const rawA95 = cells.eq(3).text().trim();
-  const rawDP = cells.eq(5).text().trim();
+  const gasoline = parseNumber(cells[3]);
+  const diesel = parseNumber(cells[5]);
 
-  // 👉 функція парсингу
-  const parseNumber = (text) => {
-    const match = text.match(/(\d+[.,]?\d*)/);
-    return match ? parseFloat(match[1].replace(",", ".")) : null;
-  };
-
-  const gasoline = parseNumber(rawA95);
-  const diesel = parseNumber(rawDP);
+  if (!Number.isFinite(diesel) || !Number.isFinite(gasoline)) {
+    throw new Error(`Prices not found. Cells: ${JSON.stringify(cells)}`);
+  }
 
   return { diesel, gasoline };
 }
-
-// ================= ROUTES =================
 
 app.get("/", (req, res) => {
   res.send("Fuel API (Kyiv) 🚀");
@@ -65,17 +60,12 @@ app.get("/health", (req, res) => {
 app.get("/api/fuel", async (req, res) => {
   const now = Date.now();
 
-  // кеш 30 хв
-  if (cache && now - lastFetch < 1800000) {
+  if (cache && now - lastFetch < 30 * 60 * 1000) {
     return res.json(cache);
   }
 
   try {
     const { diesel, gasoline } = await getFuelPrices();
-
-    if (!diesel || !gasoline) {
-      throw new Error("Prices not found");
-    }
 
     cache = {
       diesel: Number(diesel.toFixed(2)),
@@ -87,24 +77,24 @@ app.get("/api/fuel", async (req, res) => {
 
     lastFetch = now;
 
-    return res.json(cache);
-
+    res.json(cache);
   } catch (err) {
     console.error("ERROR:", err.message);
 
-    // fallback на кеш
     if (cache) {
-      return res.json(cache);
+      return res.json({
+        ...cache,
+        fallback: true,
+        fallbackReason: err.message
+      });
     }
 
-    return res.status(500).json({
+    res.status(500).json({
       error: "parse error",
       details: err.message
     });
   }
 });
-
-// ================= START =================
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on port ${PORT}`);
