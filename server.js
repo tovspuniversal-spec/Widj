@@ -23,14 +23,9 @@ async function getUPGDieselPrice() {
   if (!line) return null;
 
   // всі числа в рядку
-  const numbers = line.match(/[0-9]{2}\.[0-9]{2}/g);
+  const match = line.match(/ДП\s*([0-9]{2}\.[0-9]{2})/);
 
-  if (!numbers || numbers.length < 2) return null;
-
-  // ⚠️ важливо:
-  // [0] = бензин
-  // [1] = дизель (як правило)
-  return parseFloat(numbers[1]);
+return match ? parseFloat(match[1]) : null;
 }
 
 
