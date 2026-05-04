@@ -1,5 +1,6 @@
 import express from "express";
-import puppeteer from "puppeteer";
+import axios from "axios";
+import * as cheerio from "cheerio";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -8,47 +9,27 @@ let cache = null;
 let lastFetch = 0;
 
 async function getUPGDieselPrice() {
-  const browser = await puppeteer.launch({
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage"
-    ]
+  const { data } = await axios.get("https://auto.ria.com/uk/toplivo/upg/dt/");
+
+  const $ = cheerio.load(data);
+
+  let price = null;
+
+  $("body").each((_, el) => {
+    const text = $(el).text();
+
+    const match = text.match(/[0-9]{2}\.[0-9]{2}/);
+
+    if (match) {
+      price = parseFloat(match[0]);
+    }
   });
-
-  const page = await browser.newPage();
-
-  await page.goto("https://vseazs.com", {
-    waitUntil: "networkidle2",
-    timeout: 60000
-  });
-
-  await new Promise(r => setTimeout(r, 5000));
-
-  const price = await page.evaluate(() => {
-    const text = document.body.innerText;
-
-    // шукаємо блок з UPG
-    const upgLine = text
-      .split("\n")
-      .find(line => line.includes("UPG"));
-
-    if (!upgLine) return null;
-
-    // шукаємо число
-    const match = upgLine.match(/[0-9]{2}\.[0-9]{2}/);
-
-    return match ? parseFloat(match[0]) : null;
-  });
-
-  await browser.close();
 
   return price;
 }
 
-
 app.get("/", (req, res) => {
-  res.send("UPG Diesel API 🚀");
+  res.send("UPG Diesel API (no puppeteer) 🚀");
 });
 
 app.get("/health", (req, res) => {
@@ -65,8 +46,12 @@ app.get("/api/fuel", async (req, res) => {
   try {
     const diesel = await getUPGDieselPrice();
 
+    if (!diesel) {
+      throw new Error("No price found");
+    }
+
     cache = {
-      diesel: diesel ? Number(diesel.toFixed(2)) : null,
+      diesel: Number(diesel.toFixed(2)),
       source: "UPG",
       updatedAt: new Date().toISOString()
     };
@@ -81,7 +66,8 @@ app.get("/api/fuel", async (req, res) => {
     if (cache) return res.json(cache);
 
     res.status(500).json({
-      error: "parse error"
+      error: "parse error",
+      details: err.message
     });
   }
 });
