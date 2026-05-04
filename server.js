@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 10000;
 let cache = null;
 let lastFetch = 0;
 
-async function getPrice(url) {
+async function getUPGDieselPrice() {
   const browser = await puppeteer.launch({
     args: [
       "--no-sandbox",
@@ -22,42 +22,39 @@ async function getPrice(url) {
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
   );
 
-  await page.goto(url, {
+  await page.goto("https://vseazs.com", {
     waitUntil: "networkidle2",
     timeout: 60000
   });
 
-  // чекаємо рендер
-  await new Promise(r => setTimeout(r, 3000));
+  await new Promise(r => setTimeout(r, 4000));
 
   const price = await page.evaluate(() => {
-    // беремо всі числа на сторінці
-    const matches = document.body.innerText.match(/[0-9]{2}\.[0-9]{2}/g);
+    const rows = Array.from(document.querySelectorAll("tr"));
 
-    if (!matches) return null;
+    for (const row of rows) {
+      const text = row.innerText;
 
-    const nums = matches
-      .map(n => parseFloat(n))
-      .filter(n => n > 45 && n < 80);
+      if (text.includes("UPG")) {
+        // шукаємо ціну типу 86.90
+        const match = text.match(/[0-9]{2}\.[0-9]{2}/);
 
-    if (!nums.length) return null;
+        if (match) {
+          return parseFloat(match[0]);
+        }
+      }
+    }
 
-    // беремо середнє (стабільніше)
-    return nums.reduce((a, b) => a + b, 0) / nums.length;
+    return null;
   });
 
   await browser.close();
-if (!price) {
-  console.log("Fallback used for:", url);
-  return null;
-}
 
-return price;
+  return price;
 }
-
 
 app.get("/", (req, res) => {
-  res.send("Fuel Puppeteer API 🚀");
+  res.send("UPG Diesel API 🚀");
 });
 
 app.get("/health", (req, res) => {
@@ -72,22 +69,13 @@ app.get("/api/fuel", async (req, res) => {
   }
 
   try {
-    const dieselUrl =
-      "https://auto.ria.com/uk/toplivo/dt/";
-
-    const gasolineUrl =
-      "https://auto.ria.com/uk/toplivo/a95/";
-
-    const [diesel, gasoline] = await Promise.all([
-      getPrice(dieselUrl),
-      getPrice(gasolineUrl)
-    ]);
+    const diesel = await getUPGDieselPrice();
 
     cache = {
-  diesel: diesel ? Number(diesel.toFixed(2)) : 55,
-  gasoline: gasoline ? Number(gasoline.toFixed(2)) : 58
-};
-
+      diesel: diesel ? Number(diesel.toFixed(2)) : null,
+      source: "UPG",
+      updatedAt: new Date().toISOString()
+    };
 
     lastFetch = now;
 
@@ -99,7 +87,7 @@ app.get("/api/fuel", async (req, res) => {
     if (cache) return res.json(cache);
 
     res.status(500).json({
-      error: "puppeteer parse error"
+      error: "parse error"
     });
   }
 });
