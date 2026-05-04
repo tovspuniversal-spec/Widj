@@ -1,5 +1,6 @@
 import express from "express";
-import puppeteer from "puppeteer";
+import axios from "axios";
+import * as cheerio from "cheerio";
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -7,64 +8,40 @@ const PORT = process.env.PORT || 10000;
 let cache = null;
 let lastFetch = 0;
 
-async function getUpgEuroDieselPrice() {
-  const browser = await puppeteer.launch({
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage"
-    ]
-  });
-
-  const page = await browser.newPage();
-
-  await page.setUserAgent(
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-  );
-
-  await page.goto("https://upg.ua/", {
-    waitUntil: "networkidle2",
-    timeout: 60000
-  });
-
-  // 🔥 чекаємо поки з’явиться блок з цінами
-  await page.waitForSelector("body", { timeout: 15000 });
-
-  const price = await page.evaluate(() => {
-    // 1. знаходимо всі елементи з текстом EURO DIESEL
-    const nodes = Array.from(document.querySelectorAll("*"));
-
-    const euroNode = nodes.find(el =>
-      el.textContent?.includes("EURO DIESEL")
-    );
-
-    if (!euroNode) return null;
-
-    // 2. піднімаємось до логічного контейнера (стабільніше ніж closest div)
-    let container = euroNode;
-
-    for (let i = 0; i < 5; i++) {
-      if (!container.parentElement) break;
-      container = container.parentElement;
+async function getDieselPriceKyiv() {
+  const { data } = await axios.get("https://oilprice.com.ua/kyiv/", {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     }
-
-    const text = container.innerText || "";
-
-    // 3. витягуємо ціну (₴ або просто число)
-    const match = text.match(/(\d{1,3}[.,]?\d{0,2})\s*₴?/);
-
-    return match ? parseFloat(match[1].replace(",", ".")) : null;
   });
 
-  await browser.close();
+  const $ = cheerio.load(data);
 
-  return price;
+  const table = $("table").first();
+  const rows = table.find("tr");
+
+  // 2-й рядок (індекс 1)
+  const targetRow = rows.eq(1);
+
+  const cells = targetRow.find("td, th");
+
+  // 6-та колонка (індекс 5)
+  const dpCell = cells.eq(5);
+
+  if (!dpCell) return null;
+
+  const text = dpCell.text().trim();
+
+  const match = text.match(/(\d+[.,]?\d*)/);
+
+  return match ? parseFloat(match[1].replace(",", ".")) : null;
 }
 
 // ================= ROUTES =================
 
 app.get("/", (req, res) => {
-  res.send("UPG EURO DIESEL PROD API 🚀");
+  res.send("Kyiv Diesel API 🚀 (oilprice.com.ua)");
 });
 
 app.get("/health", (req, res) => {
@@ -74,22 +51,23 @@ app.get("/health", (req, res) => {
 app.get("/api/fuel", async (req, res) => {
   const now = Date.now();
 
-  // 🔁 кеш 30 хв
+  // кеш 30 хв
   if (cache && now - lastFetch < 1800000) {
     return res.json(cache);
   }
 
   try {
-    const diesel = await getUpgEuroDieselPrice();
+    const diesel = await getDieselPriceKyiv();
 
-    if (!diesel || isNaN(diesel)) {
-      throw new Error("EURO DIESEL not found");
+    if (!diesel) {
+      throw new Error("DP price not found");
     }
 
     cache = {
       diesel: Number(diesel.toFixed(2)),
-      fuel: "EURO_DIESEL",
-      source: "upg.ua",
+      fuel: "DP",
+      city: "Kyiv",
+      source: "oilprice.com.ua",
       updatedAt: new Date().toISOString()
     };
 
@@ -110,5 +88,5 @@ app.get("/api/fuel", async (req, res) => {
 });
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`UPG parser running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
