@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 10000;
 let cache = null;
 let lastFetch = 0;
 
-async function getDieselPriceKyiv() {
+async function getFuelPrices() {
   const { data } = await axios.get("https://oilprice.com.ua/kyiv/", {
     headers: {
       "User-Agent":
@@ -21,27 +21,38 @@ async function getDieselPriceKyiv() {
   const table = $("table").first();
   const rows = table.find("tr");
 
-  // 2-й рядок (індекс 1)
-  const targetRow = rows.eq(1);
+  let diesel = null;
+  let gasoline = null;
 
-  const cells = targetRow.find("td, th");
+  rows.each((i, row) => {
+    const cells = $(row).find("td, th");
 
-  // 6-та колонка (індекс 5)
-  const dpCell = cells.eq(5);
+    if (cells.length < 6) return;
 
-  if (!dpCell) return null;
+    // 👉 ДП (припускаємо, що він є в 5-й колонці або окремо в рядку)
+    const col5 = cells.eq(4).text().trim();
+    const col4 = cells.eq(3).text().trim(); // A95
 
-  const text = dpCell.text().trim();
+    // витягуємо числа
+    const dieselMatch = col5.match(/(\d+[.,]?\d*)/);
+    const gasolineMatch = col4.match(/(\d+[.,]?\d*)/);
 
-  const match = text.match(/(\d+[.,]?\d*)/);
+    if (!diesel && dieselMatch) {
+      diesel = parseFloat(dieselMatch[1].replace(",", "."));
+    }
 
-  return match ? parseFloat(match[1].replace(",", ".")) : null;
+    if (!gasoline && gasolineMatch) {
+      gasoline = parseFloat(gasolineMatch[1].replace(",", "."));
+    }
+  });
+
+  return { diesel, gasoline };
 }
 
 // ================= ROUTES =================
 
 app.get("/", (req, res) => {
-  res.send("Kyiv Diesel API 🚀 (oilprice.com.ua)");
+  res.send("Fuel API (Kyiv) 🚀");
 });
 
 app.get("/health", (req, res) => {
@@ -57,15 +68,15 @@ app.get("/api/fuel", async (req, res) => {
   }
 
   try {
-    const diesel = await getDieselPriceKyiv();
+    const { diesel, gasoline } = await getFuelPrices();
 
-    if (!diesel) {
-      throw new Error("DP price not found");
+    if (!diesel || !gasoline) {
+      throw new Error("Fuel prices not found");
     }
 
     cache = {
       diesel: Number(diesel.toFixed(2)),
-      fuel: "DP",
+      gasoline: Number(gasoline.toFixed(2)),
       city: "Kyiv",
       source: "oilprice.com.ua",
       updatedAt: new Date().toISOString()
