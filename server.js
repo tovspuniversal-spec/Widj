@@ -24,26 +24,33 @@ async function getFuelPrices() {
   let diesel = null;
   let gasoline = null;
 
-  rows.each((i, row) => {
-    const cells = $(row).find("td, th");
+ const rows = $("table").first().find("tr");
 
-    if (cells.length < 6) return;
+// 👉 2-й рядок (індекс 1)
+const row = rows.eq(1);
 
-    // 👉 ДП (припускаємо, що він є в 5-й колонці або окремо в рядку)
-    const col5 = cells.eq(4).text().trim();
-    const col4 = cells.eq(3).text().trim(); // A95
+const cells = row.find("td, th");
 
-    // витягуємо числа
-    const dieselMatch = col5.match(/(\d+[.,]?\d*)/);
-    const gasolineMatch = col4.match(/(\d+[.,]?\d*)/);
+if (cells.length < 6) return { diesel: null, gasoline: null };
 
-    if (!diesel && dieselMatch) {
-      diesel = parseFloat(dieselMatch[1].replace(",", "."));
-    }
+// 👉 колонки
+const colDP = cells.eq(5).text().trim();   // ДП (6 колонка)
+const colA95 = cells.eq(3).text().trim();  // A95 (4 колонка)
 
-    if (!gasoline && gasolineMatch) {
-      gasoline = parseFloat(gasolineMatch[1].replace(",", "."));
-    }
+// 👉 парсинг
+const dieselMatch = colDP.match(/(\d+[.,]?\d*)/);
+const gasolineMatch = colA95.match(/(\d+[.,]?\d*)/);
+
+const diesel = dieselMatch
+  ? parseFloat(dieselMatch[1].replace(",", "."))
+  : null;
+
+const gasoline = gasolineMatch
+  ? parseFloat(gasolineMatch[1].replace(",", "."))
+  : null;
+
+return { diesel, gasoline };
+
   });
 
   return { diesel, gasoline };
