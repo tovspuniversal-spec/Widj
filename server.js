@@ -23,7 +23,7 @@ async function getUPGDieselPrice() {
   if (!line) return null;
 
   // всі числа в рядку
-  const match = line.match(/ДП\s*([0-9]{2}\.[0-9]{2})/);
+  const match = line.match(/UPG\s*([0-9]{2}\.[0-9]{2})/);
 
 return match ? parseFloat(match[1]) : null;
 }
