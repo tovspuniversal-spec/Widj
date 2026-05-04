@@ -21,8 +21,8 @@ async function getDieselPriceKyiv() {
   const table = $("table").first();
   const rows = table.find("tr");
 
-  // 2-й рядок (індекс 1)
-  const targetRow = rows.eq(1);
+  // 1-й рядок (індекс 0)
+  const targetRow = rows.eq(0);
 
   const cells = targetRow.find("td, th");
 
