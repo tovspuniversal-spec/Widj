@@ -1,7 +1,7 @@
 {
-  "name": "dp-fuel-api",
+  "name": "fuel-api-kyiv",
   "version": "1.0.0",
-  "description": "Diesel price API parser for Ukraine (oilprice.com.ua)",
+  "description": "Fuel prices API (Diesel + A95) for Kyiv from oilprice.com.ua",
   "main": "server.js",
   "type": "module",
   "scripts": {
