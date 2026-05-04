@@ -10,7 +10,18 @@ let lastFetch = 0;
 
 async function getDieselPrice() {
   const { data } = await axios.get(
-    "https://besttarif.ua/fuel-informer/"
+    "https://besttarif.ua/fuel-informer/",
+    {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept":
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "uk-UA,uk;q=0.9,en;q=0.8",
+        "Referer": "https://www.google.com/"
+      },
+      timeout: 15000
+    }
   );
 
   const $ = cheerio.load(data);
@@ -18,40 +29,28 @@ async function getDieselPrice() {
   let dpIndex = -1;
   let price = null;
 
-  // 1. знайти таблицю
   const table = $("table").first();
-
   const rows = table.find("tr");
 
-  // 2. заголовок (перша строка)
   const headerCells = rows.first().find("th, td");
 
   headerCells.each((i, el) => {
     const text = $(el).text().trim().toUpperCase();
-
-    if (text === "ДП") {
-      dpIndex = i;
-    }
+    if (text === "ДП") dpIndex = i;
   });
 
   if (dpIndex === -1) return null;
 
-  // 3. беремо перший рядок даних
   const dataRow = rows.eq(1).find("td, th");
-
   const cell = dataRow.eq(dpIndex);
 
-  if (!cell) return null;
-
-  const text = cell.text().trim();
-
-  // 4. витягуємо число
-  const match = text.match(/(\d+[.,]?\d*)/);
+  const match = cell.text().match(/(\d+[.,]?\d*)/);
 
   price = match ? parseFloat(match[1].replace(",", ".")) : null;
 
   return price;
 }
+
 
 // routes
 app.get("/", (req, res) => {
