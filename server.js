@@ -9,7 +9,7 @@ let cache = null;
 let lastFetch = 0;
 
 async function getUPGDieselPrice() {
-  const { data } = await axios.get("https://vseazs.com");
+  const { data } = await axios.get("https://auto.ria.com/uk/toplivo/kiev/dt/");
 
   const $ = cheerio.load(data);
 
