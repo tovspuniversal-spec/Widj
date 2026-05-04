@@ -21,38 +21,22 @@ async function getDieselPrice() {
 
   const $ = cheerio.load(data);
 
-  let price = null;
+  const table = $("table").first();
+  const rows = table.find("tr");
 
-  // 1. знайти елемент з текстом "ДП"
-  const dpCell = $("td, th")
-    .filter((i, el) => $(el).text().trim() === "ДП")
-    .first();
+  // беремо перший рядок з даними (після заголовка)
+  const dataRow = rows.eq(1).find("td, th");
+
+  // ДП = 4 колонка → індекс 3
+  const dpCell = dataRow.eq(3);
 
   if (!dpCell) return null;
 
-  // 2. піднятись до рядка
-  const dpRow = dpCell.closest("tr");
+  const text = dpCell.text().trim();
 
-  // 3. взяти наступний рядок (де зазвичай ціна)
-  const nextRow = dpRow.next("tr");
+  const match = text.match(/(\d+[.,]?\d*)/);
 
-  if (!nextRow) return null;
-
-  // 4. взяти всі клітинки
-  const cells = nextRow.find("td, th");
-
-  // 5. шукаємо перше число в рядку
-  cells.each((i, el) => {
-    const text = $(el).text().trim();
-
-    const match = text.match(/(\d+[.,]?\d*)/);
-
-    if (match && !price) {
-      price = parseFloat(match[1].replace(",", "."));
-    }
-  });
-
-  return price;
+  return match ? parseFloat(match[1].replace(",", ".")) : null;
 }
 
 // routes
